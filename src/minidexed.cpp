@@ -95,11 +95,13 @@ m_BusPerformanceConfig{},
 m_pMIDIKeyboard{},
 m_PCKeyboard{this, pConfig, &m_UI},
 m_SerialMIDI{this, pInterrupt, pConfig, &m_UI},
+m_Pisound{this, pConfig, &m_UI},
 m_fMasterVolume{},
 m_fMasterVolumeW{},
 m_fBusGain{},
 m_SDFilter{},
 m_bUseSerial{},
+m_bUsePisound{},
 m_bQuadDAC8Chan{},
 m_pSoundDevice{},
 m_bChannelsSwapped{pConfig->GetChannelsSwapped()},
@@ -266,7 +268,22 @@ m_fRamp{10.0f / pConfig->GetSampleRate()}
 
 	// select the sound device
 	const char *pDeviceName = pConfig->GetSoundDevice();
-	if (strcmp(pDeviceName, "i2s") == 0)
+	if (pConfig->GetPisound())
+	{
+		// Blokas Pisound: the HAT's ADC generates the I2S clocks,
+		// so the Raspberry Pi runs as I2S slave (no I2C DAC control).
+		LOGNOTE("Pisound mode");
+		if (!m_Pisound.InitAudio(pConfig->GetSampleRate()))
+		{
+			LOGERR("Pisound audio init failed");
+		}
+		m_pSoundDevice = new CI2SSoundBaseDevice(pInterrupt, pConfig->GetSampleRate(),
+							 pConfig->GetChunkSize(), true,
+							 nullptr, 0,
+							 CI2SSoundBaseDevice::DeviceModeTXOnly,
+							 2); // 2 channels - L+R
+	}
+	else if (strcmp(pDeviceName, "i2s") == 0)
 	{
 		LOGNOTE("I2S mode");
 #if RASPPI == 5
@@ -386,6 +403,20 @@ bool CMiniDexed::Initialize()
 		LOGNOTE("Serial MIDI interface enabled");
 
 		m_bUseSerial = true;
+	}
+
+	if (m_pConfig->GetPisound())
+	{
+		if (m_Pisound.Initialize())
+		{
+			LOGNOTE("Pisound MIDI interface enabled");
+
+			m_bUsePisound = true;
+		}
+		else
+		{
+			LOGERR("Pisound MIDI interface not available");
+		}
 	}
 
 	if (m_pConfig->GetMIDIRXProgramChange())
@@ -522,6 +553,12 @@ void CMiniDexed::Process(bool bPlugAndPlayUpdated)
 	if (m_bUseSerial)
 	{
 		m_SerialMIDI.Process();
+		pScheduler->Yield();
+	}
+
+	if (m_bUsePisound)
+	{
+		m_Pisound.Process();
 		pScheduler->Yield();
 	}
 
@@ -902,6 +939,10 @@ void CMiniDexed::ProgramChange(int nProgram, int nTG)
 		if (m_bSysExEnable[nTG])
 		{
 			m_SerialMIDI.SendSystemExclusiveVoice(nProgram, m_SerialMIDI.GetDeviceName(), 0, nTG);
+			if (m_bUsePisound)
+			{
+				m_Pisound.SendSystemExclusiveVoice(nProgram, m_Pisound.GetDeviceName(), 0, nTG);
+			}
 		}
 	}
 
@@ -1092,6 +1133,9 @@ void CMiniDexed::SetMIDIChannel(int nChannel, int nTG)
 	{
 		m_SerialMIDI.SetChannel(nChannel, nTG);
 	}
+	// The channel map is cheap to keep, so update it even if the
+	// Pisound is not (yet) initialized.
+	m_Pisound.SetChannel(nChannel, nTG);
 	if (m_UDPMIDI)
 	{
 		m_UDPMIDI->SetChannel(nChannel, nTG);

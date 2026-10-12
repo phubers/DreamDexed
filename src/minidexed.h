@@ -50,6 +50,7 @@
 #include "net/mdnspublisher.h"
 #include "pckeyboard.h"
 #include "performanceconfig.h"
+#include "pisounddevice.h"
 #include "perftimer.h"
 #include "sdfilter.h"
 #include "serialmididevice.h"
@@ -414,6 +415,7 @@ private:
 	CMIDIKeyboard *m_pMIDIKeyboard[CConfig::MaxUSBMIDIDevices];
 	CPCKeyboard m_PCKeyboard;
 	CSerialMIDIDevice m_SerialMIDI;
+	CPisoundDevice m_Pisound;
 	float m_fMasterVolume[8];
 	float m_fMasterVolumeW;
 
@@ -422,6 +424,7 @@ private:
 	SDFilter m_SDFilter;
 
 	bool m_bUseSerial;
+	bool m_bUsePisound;
 	bool m_bQuadDAC8Chan;
 
 	CSoundBaseDevice *m_pSoundDevice;
