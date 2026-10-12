@@ -125,6 +125,7 @@ public:
 	bool GetChannelsSwapped() const;
 	uint8_t GetEngineType() const;
 	bool GetQuadDAC8Chan() const; // false if not specified
+	bool GetPisound() const; // Blokas Pisound HAT: I2S slave audio + SPI MIDI
 
 	// MIDI
 	unsigned GetMIDIBaudRate() const;
@@ -305,6 +306,7 @@ private:
 	bool m_bChannelsSwapped;
 	uint8_t m_EngineType;
 	bool m_bQuadDAC8Chan;
+	bool m_bPisound;
 
 	unsigned m_nMIDIBaudRate;
 	std::string m_MIDIThruIn;

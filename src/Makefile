@@ -7,7 +7,7 @@ SYNTH_DEXED_DIR = ../Synth_Dexed/src
 CMSIS_DIR = ../CMSIS_5/CMSIS
 
 OBJS = main.o kernel.o minidexed.o config.o userinterface.o uimenu.o uitostring.o ddfont8x16.o ddfont12x22.o \
-       mididevice.o midikeyboard.o serialmididevice.o pckeyboard.o \
+       mididevice.o midikeyboard.o serialmididevice.o pisounddevice.o pckeyboard.o \
        sysexfileloader.o voices.o performanceconfig.o perftimer.o \
        effect.o effect_cloudseed2.o effect_platervbstereo.o effect_dreamdelay.o bus.o uibuttons.o midipin.o \
        ../CloudSeedCore/DSP/Biquad.o ../CloudSeedCore/DSP/RandomBuffer.o ../CloudSeedCore/DSP/FastSin.o \
