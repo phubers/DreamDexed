@@ -40,6 +40,7 @@ enum TFTPStatus
 	FileStatusOk = 150,
 
 	Success = 200,
+	SystemStatus = 211,
 	SystemType = 215,
 	ReadyForNewUser = 220,
 	ClosingControl = 221,
@@ -119,6 +120,9 @@ private:
 	bool PrintWorkingDirectory(const char *pArgs);
 	bool List(const char *pArgs);
 	bool ListFileNames(const char *pArgs);
+	bool ListMachineReadable(const char *pArgs);
+	bool ListSingleMachineReadable(const char *pArgs);
+	bool Features(const char *pArgs);
 	bool RenameFrom(const char *pArgs);
 	bool RenameTo(const char *pArgs);
 	bool Bye(const char *pArgs);
