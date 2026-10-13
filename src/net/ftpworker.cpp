@@ -105,6 +105,9 @@ const TFTPCommand CFTPWorker::Commands[] =
 	{"PWD", &CFTPWorker::PrintWorkingDirectory},
 	{"LIST", &CFTPWorker::List},
 	{"NLST", &CFTPWorker::ListFileNames},
+	{"MLSD", &CFTPWorker::ListMachineReadable},
+	{"MLST", &CFTPWorker::ListSingleMachineReadable},
+	{"FEAT", &CFTPWorker::Features},
 	{"RNFR", &CFTPWorker::RenameFrom},
 	{"RNTO", &CFTPWorker::RenameTo},
 	{"BYE", &CFTPWorker::Bye},
@@ -993,6 +996,169 @@ bool CFTPWorker::List(const char *pArgs)
 
 	delete pDataSocket;
 	SendStatus(TFTPStatus::TransferComplete, "Transfer complete.");
+	return true;
+}
+
+// Formats the RFC 3659 facts for one entry, e.g.
+// "type=file;size=123;modify=20261012133000; name"
+// FAT dates without a valid month or day (e.g. volume roots) are clamped.
+static int FormatMachineReadableFacts(char *pBuffer, size_t nSize, bool bDirectory, uint32_t nFileSize,
+				      uint16_t nDate, uint16_t nTime, const char *pName)
+{
+	const unsigned nYear = 1980 + (nDate >> 9);
+	unsigned nMonth = (nDate >> 5) & 0x0F;
+	unsigned nDay = nDate & 0x1F;
+	const unsigned nHour = (nTime >> 11) & 0x1F;
+	const unsigned nMinute = (nTime >> 5) & 0x3F;
+	const unsigned nSecond = (nTime & 0x1F) * 2;
+
+	if (nMonth == 0)
+		nMonth = 1;
+	if (nDay == 0)
+		nDay = 1;
+
+	if (bDirectory)
+		return snprintf(pBuffer, nSize, "type=dir;modify=%04u%02u%02u%02u%02u%02u; %s",
+				nYear, nMonth, nDay, nHour, nMinute, nSecond, pName);
+
+	return snprintf(pBuffer, nSize, "type=file;size=%" PRIu32 ";modify=%04u%02u%02u%02u%02u%02u; %s",
+			nFileSize, nYear, nMonth, nDay, nHour, nMinute, nSecond, pName);
+}
+
+// RFC 3659 machine-readable directory listing. Modern FTP clients
+// (e.g. ForkLift, Transmit) prefer this over parsing LIST output.
+bool CFTPWorker::ListMachineReadable(const char *pArgs)
+{
+	if (!CheckLoggedIn())
+		return false;
+
+	if (!SendStatus(TFTPStatus::FileStatusOk, "Command OK."))
+		return false;
+
+	CSocket *pDataSocket = OpenDataConnection();
+	if (pDataSocket == nullptr)
+		return false;
+
+	char Buffer[TextBufferSize];
+
+	size_t nEntries;
+	const TDirectoryListEntry *pDirEntries = BuildDirectoryList(nEntries);
+
+	if (pDirEntries)
+	{
+		for (size_t i = 0; i < nEntries; ++i)
+		{
+			const TDirectoryListEntry &Entry = pDirEntries[i];
+
+			int nLength = FormatMachineReadableFacts(Buffer, sizeof(Buffer) - 2,
+								 Entry.Type == TDirectoryListEntryType::Directory,
+								 Entry.nSize, Entry.nLastModifedDate, Entry.nLastModifedTime,
+								 Entry.Name);
+			if (nLength >= 0 && nLength < ssizeof(Buffer) - 2)
+			{
+				Buffer[nLength++] = '\r';
+				Buffer[nLength++] = '\n';
+				Buffer[nLength] = '\0';
+			}
+			else
+			{
+				nLength = -1;
+			}
+
+			if (nLength < 0 ||
+			    nLength >= ssizeof(Buffer) ||
+			    pDataSocket->Send(Buffer, static_cast<unsigned>(nLength), 0) < 0)
+			{
+				delete[] pDirEntries;
+				delete pDataSocket;
+				SendStatus(TFTPStatus::DataConnectionFailed, "Transfer error.");
+				return false;
+			}
+		}
+
+		delete[] pDirEntries;
+	}
+
+	delete pDataSocket;
+	SendStatus(TFTPStatus::TransferComplete, "Transfer complete.");
+	return true;
+}
+
+// RFC 3659 facts for a single file or directory, sent on the control connection
+bool CFTPWorker::ListSingleMachineReadable(const char *pArgs)
+{
+	if (!CheckLoggedIn())
+		return false;
+
+	char Buffer[TextBufferSize];
+	int nLength;
+
+	const bool bNoArgs = pArgs == nullptr || pArgs[0] == '\0';
+	if (bNoArgs && m_CurrentPath.GetLength() == 0)
+	{
+		// Virtual root with the volume list
+		nLength = FormatMachineReadableFacts(Buffer, sizeof(Buffer), true, 0, 0, 0, "/");
+	}
+	else
+	{
+		CString Path = bNoArgs ? m_CurrentPath : RealPath(pArgs);
+		const char *pName = bNoArgs ? static_cast<const char *>(m_CurrentPath) : pArgs;
+
+		FILINFO FileInfo;
+		if (f_stat(Path, &FileInfo) == FR_OK)
+		{
+			nLength = FormatMachineReadableFacts(Buffer, sizeof(Buffer),
+							     (FileInfo.fattrib & AM_DIR) != 0, FileInfo.fsize,
+							     FileInfo.fdate, FileInfo.ftime, pName);
+		}
+		else
+		{
+			// f_stat() cannot stat a volume root such as "SD:"
+			DIR Dir;
+			if (f_opendir(&Dir, Path) != FR_OK)
+			{
+				SendStatus(TFTPStatus::FileNotFound, "File not found.");
+				return false;
+			}
+			f_closedir(&Dir);
+			nLength = FormatMachineReadableFacts(Buffer, sizeof(Buffer), true, 0, 0, 0, pName);
+		}
+	}
+
+	if (nLength < 0 || nLength >= ssizeof(Buffer))
+	{
+		SendStatus(TFTPStatus::ActionAborted, "Name too long.");
+		return false;
+	}
+
+	// Multi-line reply: "250-Listing", " <facts>", "250 End"
+	char Reply[TextBufferSize + 32];
+	const int nReplyLength = snprintf(Reply, sizeof(Reply), "250-Listing\r\n %s\r\n250 End\r\n", Buffer);
+	if (nReplyLength < 0 || nReplyLength >= ssizeof(Reply) ||
+	    m_pControlSocket->Send(Reply, static_cast<unsigned>(nReplyLength), 0) < 0)
+	{
+		LOGERR("Failed to send MLST reply");
+		return false;
+	}
+
+	return true;
+}
+
+// RFC 2389 feature list, so that clients know they can use MLSD
+bool CFTPWorker::Features(const char *pArgs)
+{
+	assert(m_pControlSocket != nullptr);
+
+	static const char Reply[] = "211-Features:\r\n"
+				    " MLST type*;size*;modify*;\r\n"
+				    "211 End\r\n";
+
+	if (m_pControlSocket->Send(Reply, sizeof(Reply) - 1, 0) < 0)
+	{
+		LOGERR("Failed to send features");
+		return false;
+	}
+
 	return true;
 }
 
