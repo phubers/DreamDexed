@@ -147,6 +147,12 @@ jobs:
     name: Combine Artifacts
     runs-on: ubuntu-22.04
     needs: [ build64, build32 ]
+
+    # The continuous release is created and replaced from here, which the
+    # read-only default GITHUB_TOKEN cannot do.
+    permissions:
+      contents: write
+
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
