@@ -1,0 +1,25 @@
+# Blokas Pisound (I2S audio in/out, DIN MIDI in/out, button)
+# https://blokas.io/pisound/
+#
+# The Pisound uses GPIO 7-11 (SPI0 for MIDI), 12, 13, 16, 24, 25, 26
+# (audio and MIDI control) and 17 (button). The default LCD, encoder
+# and button pins conflict with these, so they are disabled here.
+# The Pisound button is GPIO 17: click = program up, long press = program down.
+
+Pisound=1
+SampleRate=48000
+
+LCDEnabled=0
+EncoderEnabled=0
+
+ButtonPinPrev=0
+ButtonPinNext=0
+ButtonPinBack=0
+ButtonPinSelect=0
+ButtonPinHome=0
+ButtonPinShortcut=0
+
+ButtonPinPgmUp=17
+ButtonActionPgmUp=click
+ButtonPinPgmDown=17
+ButtonActionPgmDown=longpress

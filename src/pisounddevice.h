@@ -8,9 +8,10 @@
 //   - MIDI: DIN MIDI in/out is handled by a microcontroller on the HAT,
 //     which talks to the Raspberry Pi over SPI0 (CE0) at 150 kHz.
 //
-// Protocol and pin assignments are taken from the Linux driver
-// sound/soc/bcm/pisound.c and overlays/pisound-overlay.dts
-// (Copyright (C) 2016-2024 Vilniaus Blokas UAB, GPL v2).
+// This is an independent implementation. The pin assignments and the
+// SPI protocol behaviour were determined by studying the Linux driver
+// (sound/soc/bcm/pisound.c and overlays/pisound-overlay.dts by
+// Vilniaus Blokas UAB). No code from that driver is included here.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
